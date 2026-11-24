@@ -33,8 +33,9 @@ class ArduinoComm:
         self.port = port
         self.arduino = serial.Serial(port=port, baudrate=baud_rate, timeout=1, write_timeout=1)
         self.RECEIVED_PACKET_SIZE = 2
+        self.SENT_PACKET_SIZE = 2
 
-        # //TODO this should make board reset when the port opens
+        # board resets when the port opens
         time.sleep(2)
 
     def SendPacket(self, messageType, otherData=None):
@@ -46,6 +47,9 @@ class ArduinoComm:
         while i < len(otherData):
             packet.append(otherData[i])
             i += 1
+
+        if len(packet) != self.SENT_PACKET_SIZE:
+            raise ValueError("packet must be exactly 2 bytes")
         self.arduino.write(packet)
 
     def ReceivePacket(self):
@@ -63,16 +67,16 @@ class ArduinoComm:
         self.SendPacket(SentPacketType.MOVE_BACKWARD, [speed])
         return self.ReceivePacket()
 
-    def Left(self, speed):
-        self.SendPacket(SentPacketType.TURN_STATIONARY, [LEFT, speed])
+    def Left(self):
+        self.SendPacket(SentPacketType.TURN_STATIONARY, [LEFT])
         return self.ReceivePacket()
 
-    def Right(self, speed):
-        self.SendPacket(SentPacketType.TURN_STATIONARY, [RIGHT, speed])
+    def Right(self):
+        self.SendPacket(SentPacketType.TURN_STATIONARY, [RIGHT])
         return self.ReceivePacket()
 
     def Stop(self):
-        self.SendPacket(SentPacketType.STOP)
+        self.SendPacket(SentPacketType.STOP, [0])
         return self.ReceivePacket()
 
     def Cleanup(self):
@@ -90,10 +94,17 @@ if __name__ == "__main__":
         print(comm.ReceivePacket())
 
         if len(sys.argv) > 2 and sys.argv[2] == "drive":
-            moves = [comm.Forward, comm.Backward, comm.Left, comm.Right]
+            steps = [
+                (comm.Forward, [DRIVE_SPEED]),
+                (comm.Backward, [DRIVE_SPEED]),
+                (comm.Left, []),
+                (comm.Right, []),
+            ]
             i = 0
-            while i < len(moves):
-                print(moves[i](DRIVE_SPEED))
+            while i < len(steps):
+                action = steps[i][0]
+                args = steps[i][1]
+                print(action(*args))
                 time.sleep(1)
                 comm.Stop()
                 i += 1
