@@ -79,6 +79,7 @@ class ArduinoComm:
         self.last_plan_time = None
         self.last_failure = None
         self.last_turn_degrees = None
+        self.last_cancelled_steps = None
         self.events = []
 
         # board resets when the port opens
@@ -173,6 +174,7 @@ class ArduinoComm:
     # returns True when the Arduino accepts the plan, False otherwise (see last_failure)
     def SendPlan(self, steps, wait_seconds=DEFAULT_WAIT):
         self.last_failure = None
+        self.last_cancelled_steps = None
 
         if len(steps) < 1 or len(steps) > MAX_PLAN_STEPS:
             raise ValueError("a plan needs 1 to " + str(MAX_PLAN_STEPS) + " steps")
@@ -193,7 +195,8 @@ class ArduinoComm:
             packet.append(STEP_TYPES[step.kind])
             packet.append(step.amount)
             i += 1
-
+        # unread events belong to the plan being replaced
+        self.events = []
         self.arduino.write(packet)
         self.last_plan_time = now
 
@@ -215,10 +218,12 @@ class ArduinoComm:
                     if reply[1] in (1, 2, 3):
                         self.last_failure = FailReason(reply[1]).name
                     done = True
+                elif reply[0] == ReceivedPacketType.BATCH_CANCELLED:
+                    # the old plan stopped, reply holds how many of its steps finished
+                    self.last_cancelled_steps = reply[1]
                 elif reply[0] is not None:
-                    # events from the plan that was just replaced
+                    # other leftovers from the old plan are dropped
                     self.Record(reply)
-                    self.events.append(reply)
         return accepted
 
     # returns the events that arrived since the last call, oldest first
